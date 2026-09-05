@@ -51,6 +51,51 @@ runs. The button path was verified before those changes landed, so a press
 should now produce a full-bleed A4 PDF with no white band — but that exact
 combination is unverified.
 
+## Speed
+
+Measured press-to-PDF on the reference Pi (700MHz ARMv6), 300dpi colour A4:
+
+| Stage | Before | After |
+|---|---|---|
+| Device discovery (`scanimage -L`) | 10.4s | 0.1s |
+| Scan (device + decode + re-encode) | 16.6s | 16.6s |
+| JPEG → PDF | 5.8s | 0.05s |
+| **Total** | **~33s** | **~17s** |
+
+**Pass the device's JPEG through instead of decoding and re-encoding it.**
+The remaining 16.6s contains 6.6s of CPU that does no useful work: the backend
+decodes the device's JPEG to RGB with libjpeg, and `scanimage --format=jpeg`
+immediately re-encodes that RGB back to JPEG. Besides the time, this costs a
+generation of quality for nothing.
+
+This looks tractable because the hard part is already done. `brother_color.c`
+collects the whole page into a temp file during its COLLECTING phase and only
+then decodes — so a complete baseline JPEG file for the page already exists on
+disk before any decoding starts. SANE has a frame type for exactly this,
+`SANE_FRAME_JPEG` (0x0B, "complete baseline JPEG file").
+
+What stops it being a small change: `SANE_FRAME_JPEG` is an extension beyond
+the five frame types in the core enum, frontend support for it is uneven, and
+returning it unconditionally would break every frontend that expects RGB. It
+would have to be opt-in, and whether stock `scanimage` writes such a frame out
+verbatim is unverified. Worth measuring before committing to it.
+
+**Two sleeps in the scan path were investigated and deliberately left alone.**
+The 3s after the start-scan command (`brother_scanner.c`) costs nothing:
+removing it made no measurable difference, because the device takes that long
+to produce data regardless and the read simply blocks instead. The 2s after
+close (`brother_devaccs.c`) is load-bearing on this model, not just the
+DCP-1510 it was written for — with it removed, a second scan started
+immediately after the first fails with `sane_read: Error during device I/O`.
+
+It could still be moved off the critical path by deferring it: record the close
+time and wait at the *next* open only if less than 2s has passed, so the PDF is
+delivered 2s sooner and back-to-back scans stay protected. That needs the
+timestamp shared between processes (each `scanimage` run is a separate
+process), which means a file somewhere writable by every scanning user — and if
+that write silently fails the protection is lost and scans start erroring. Not
+obviously worth 2s of a 17s budget.
+
 ## Driver
 
 **Re-test the DCP-1510 partial-scan quirk.** `brother_scanner.c` carries an EOF

@@ -134,7 +134,16 @@ The function codes are **not** the `APPNUM` values Brother uses in its network p
 brscan-skeyd --handler /usr/libexec/brscan-skeyd/handler.sh --verbose
 ```
 
-The handler runs under `/bin/sh` with `BRSCAN_SKEY_CODE` set (and `BRSCAN_DEVICE` if `--device` was given). The bundled `handler.sh` scans one page and writes a PDF, assembling it with `img2pdf` so the JPEG is embedded without re-encoding — which matters on slow hardware. A systemd unit is in `skeyd/brscan-skeyd.service`.
+The handler runs under `/bin/sh` with `BRSCAN_SKEY_CODE` set (and `BRSCAN_DEVICE` if `--device` was given). The bundled `handler.sh` scans one page and writes a PDF. A systemd unit is in `skeyd/brscan-skeyd.service`.
+
+### Keeping it quick
+
+On a 700MHz ARMv6 the press-to-PDF round trip is about 17s for a 300dpi colour A4 page, of which the scan itself is 16.6s. Two things that are easy to get wrong dominated the rest, and both are handled by the bundled handler:
+
+- **Discovery loads every SANE backend.** A stock `/etc/sane.d/dll.conf` lists ~80, and `net`, `escl` and `airscan` block on network probes: `scanimage -L` took 10.4s wall for 1.8s of CPU. The handler points `SANE_CONFIG_DIR` at a one-line backend list, which takes 0.1s. This affects discovery only — opening a device by name was never slow.
+- **PDF assembly costs more than it looks.** `img2pdf` is correct and does not re-encode, but spends 4.9s of its 5.8s importing PIL and pikepdf. `brscan-jpeg2pdf`, installed alongside the handler, wraps the JPEG in a single-page PDF directly (identical `MediaBox`, no decode) in 0.05s. `img2pdf` remains the fallback.
+
+The 3s pause after the start-scan command is not worth removing — the device takes that long to produce data anyway. The 2s pause after close *is* load-bearing: without it a scan started immediately after another fails with an I/O error.
 
 The daemon and the SANE backend interlock through a SysV semaphore keyed by `ftok("/var/lib/brscan/skey.lock", 'b')`, so a poll cannot collide with an in-progress scan. Brother derived its key from a path that only exists with the proprietary package installed; when that binary is absent the backend now falls back to the same key this daemon uses, instead of silently disabling the interlock.
 
