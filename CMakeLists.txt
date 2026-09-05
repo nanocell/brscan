@@ -95,6 +95,29 @@ install(CODE "
   execute_process(COMMAND \${CMAKE_COMMAND} -E create_symlink Brsane.ini \$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/share/sane/brother/Brsane2.ini)
 ")
 
+# Press-to-scan daemon: polls the panel SCAN key and runs a handler.
+# Replaces Brother's x86-only brscan-skey, which cannot run on ARM.
+option(BRSCAN_BUILD_SKEYD "Build the brscan-skeyd scan-key daemon" ON)
+if(BRSCAN_BUILD_SKEYD)
+  add_executable(brscan-skeyd skeyd/brscan-skeyd.c)
+  target_include_directories(brscan-skeyd PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${LIBUSB_INCLUDE_DIR})
+  target_link_libraries(brscan-skeyd usb)
+  install(TARGETS brscan-skeyd RUNTIME DESTINATION bin)
+  install(PROGRAMS skeyd/handler.sh
+          DESTINATION libexec/brscan-skeyd RENAME handler.sh)
+endif()
+
+# Diagnostic probe for the panel SCAN key notification channel. Not installed;
+# built on demand for protocol investigation on real hardware.
+option(BRSCAN_BUILD_TOOLS "Build brscan diagnostic tools" OFF)
+if(BRSCAN_BUILD_TOOLS)
+  add_executable(brscan-usbprobe tools/brscan-usbprobe.c)
+  target_include_directories(brscan-usbprobe PRIVATE ${LIBUSB_INCLUDE_DIR})
+  target_link_libraries(brscan-usbprobe usb)
+endif()
+
 option(BRSCAN_BUILD_TESTS "Build brscan unit tests" OFF)
 if(BRSCAN_BUILD_TESTS)
   enable_testing()

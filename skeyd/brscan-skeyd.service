@@ -1,0 +1,35 @@
+[Unit]
+Description=Brother scan-key daemon (press-to-scan)
+Documentation=https://github.com/nanocell/brscan
+After=multi-user.target
+
+[Service]
+Type=simple
+# Needs the "scanner" group for the udev ACL on the USB node. Not run as root:
+# it only needs USB access plus write access to the output directory.
+User=vanaarde
+SupplementaryGroups=scanner
+
+Environment=BRSCAN_OUTDIR=/srv/scans
+Environment=BRSCAN_RESOLUTION=300
+# Quoted: the value contains a space, and systemd otherwise parses "Color" as
+# a second, malformed assignment and drops the whole setting.
+Environment="BRSCAN_MODE=24bit Color"
+# The DCP-7060D advertises a 297mm A4 platen but its carriage stops at ~291mm;
+# without this the last ~6mm comes out as a white band.
+Environment=BRSCAN_HEIGHT_MM=291
+
+ExecStart=/usr/bin/brscan-skeyd --verbose --handler /usr/libexec/brscan-skeyd/handler.sh
+
+Restart=always
+RestartSec=5
+
+# The daemon polls USB and forks a scan handler; it needs no other privilege.
+NoNewPrivileges=true
+PrivateTmp=false
+ProtectSystem=full
+ProtectHome=false
+ReadWritePaths=/srv/scans /var/lib/brscan /var/tmp
+
+[Install]
+WantedBy=multi-user.target

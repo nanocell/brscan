@@ -1136,6 +1136,8 @@ int  usb_set_configuration_or_reset_toggle(
 #include <stdio.h>
 #include <string.h>
 
+#include "brscan_skey.h"
+
 #if 0
 #define ERRPRINT printf
 #define DBGPRINT printf
@@ -1162,9 +1164,19 @@ key_t get_semkey(){
     fclose(fp_skey);
   }
   else{
-    ERRPRINT("get_semkey open pipe error , file doesn't exist");
-    semid = -1;
-    return semid;
+    /* Brother's proprietary brscan-skey is absent - always the case on ARM,
+     * where it has no build. Derive the same key brscan-skeyd uses so the two
+     * still interlock. Previously this returned -1, leaving every
+     * enter/release_usb_criticalsection() call a silent no-op and allowing a
+     * scan-key poll to collide with an in-progress scan on the bus. */
+    key_t key = ftok(SKEY_SEM_PATH, SKEY_SEM_PROJ);
+
+    if (key == (key_t)-1) {
+      ERRPRINT("get_semkey: ftok(%s) failed\n", SKEY_SEM_PATH);
+      return (key_t)-1;
+    }
+    DBGPRINT("get_semkey: using brscan-skeyd key 0x%x\n", (unsigned)key);
+    return key;
   }
   fp_skey = popen(SKEY,"r");
   semid = -1;
