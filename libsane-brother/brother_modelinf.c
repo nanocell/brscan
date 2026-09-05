@@ -736,6 +736,16 @@ void GetSupportScanAreaHeight(int series,PMODELCONFIG modelConfig)
 {
 	switch(series)
 	{
+		case	GENERIC_YCBCR_NOADF:
+			/* Flatbed-only models with an A4 platen. Without this they take
+			 * the 355.6 mm (legal) default below, so a frontend asked to scan
+			 * "the whole page" requests 14 inches; the scanner stops at the
+			 * end of the glass, the read times out, and the EOF fallback pads
+			 * the surplus white — a large blank band under the image.
+			 * Both known series-14 devices (DCP-1510, DCP-7060D) are A4. */
+			modelConfig->SupportScanAreaHeight = 297.0;
+			break;
+
 	  //scan area of BH3,ALL and L4CFB are same.
 		default:
 #if 0  //M-LNX-58

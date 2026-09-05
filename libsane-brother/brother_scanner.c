@@ -2232,12 +2232,48 @@ GetDeviceScanArea( Brother_Scanner *this, LPAREARECT lpScanAreaDot )
 
 	lMaxScanPixels = this->devScanInfo.dwMaxScanPixels;
 
-	if( this->devScanInfo.wScanSource == MFCSCANSRC_FB ){
+	/* Flatbed length limit.
+	 *
+	 * Two device quirks make the naive form of this test wrong, both seen on
+	 * a DCP-7060D whose I-command reply is "300,300,1,209,2480,0,0,":
+	 *
+	 *   - It reports scan source 1 (ADF) even though it is flatbed-only and
+	 *     has no feeder at all. Trusting that alone takes the ADF branch and
+	 *     permits a 14 inch scan, so consult the model's capabilities too:
+	 *     the ADF branch is only meaningful if the model actually has one.
+	 *
+	 *   - It reports max scan height and max raster as 0, i.e. it declines to
+	 *     state a flatbed limit. Taken literally that is a zero-length scan;
+	 *     taken as "no limit" the scan runs past the end of the glass. The
+	 *     device stops sending at the true end of the platen, the read times
+	 *     out and the EOF fallback pads the remainder white — producing a
+	 *     page with a white band below the scanned area.
+	 *
+	 * When the device gives no usable limit, derive one from the maximum
+	 * paper size it reported in the Q-command instead.
+	 */
+	if( this->devScanInfo.wScanSource == MFCSCANSRC_FB ||
+	    !this->modelConfig.SupportScanSrc.bit.ADF ){
 		//
 		// When the scan-source is FB
-		//    restrict to the max claster number (it is acquired from the device) 
+		//    restrict to the max claster number (it is acquired from the device)
 		//
 		lMaxScanRaster = this->devScanInfo.dwMaxScanRaster;
+
+		if( lMaxScanRaster <= 0 ){
+			/* nPaperSizeMax: 1 = A4 (297.0 mm), 2 = B4 (364.0 mm).
+			 * Lengths are in 0.1 mm, so rasters = length * dpi / 254. */
+			LONG lPlatenLength = ( this->mfcDeviceInfo.nPaperSizeMax == 2 )
+			                     ? 3640 : 2970;
+
+			lMaxScanRaster = ( lPlatenLength *
+			                   (LONG)this->devScanInfo.DeviceScan.wResoY ) / 254;
+
+			WriteLog( "  device reported no flatbed raster limit; "
+			          "using %ld rasters from paper size %d",
+			          (long)lMaxScanRaster,
+			          (int)this->mfcDeviceInfo.nPaperSizeMax );
+		}
 	}else{
 		//
 		// When the scan-source is ADF restrict to 14 inch.
