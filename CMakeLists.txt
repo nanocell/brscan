@@ -105,6 +105,14 @@ if(BRSCAN_BUILD_SKEYD)
     ${LIBUSB_INCLUDE_DIR})
   target_link_libraries(brscan-skeyd usb)
   install(TARGETS brscan-skeyd RUNTIME DESTINATION bin)
+
+  # Wraps the scanned JPEG in a PDF without decoding it. Lives beside the
+  # handler rather than in bin/: it is an implementation detail of the
+  # press-to-scan pipeline, not a general-purpose tool worth a name in $PATH.
+  add_executable(brscan-jpeg2pdf skeyd/jpeg2pdf.c)
+  install(TARGETS brscan-jpeg2pdf
+          RUNTIME DESTINATION libexec/brscan-skeyd)
+
   install(PROGRAMS skeyd/handler.sh
           DESTINATION libexec/brscan-skeyd RENAME handler.sh)
 endif()

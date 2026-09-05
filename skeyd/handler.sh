@@ -77,16 +77,37 @@ fi
 mkdir -p "$OUTDIR" || exit 1
 out="$OUTDIR/scan-$stamp.pdf"
 
-# img2pdf embeds the JPEG bitstream directly with no re-encode. ImageMagick
-# would decode and re-encode the full-page bitmap, which is far slower here.
-if command -v img2pdf >/dev/null 2>&1; then
+# Wrap the JPEG in a PDF. Both routes embed the bitstream as a /DCTDecode
+# stream with no re-encode - ImageMagick, which would decode and re-encode the
+# full-page bitmap, is far slower and loses a generation of quality.
+#
+# brscan-jpeg2pdf is preferred purely on startup cost: img2pdf is correct but
+# spends 4.9 of its 5.8s importing PIL and pikepdf before it looks at the file,
+# which is a sixth of the whole press-to-PDF time on slow hardware. img2pdf
+# stays as the fallback so an existing install keeps working, and because it
+# handles JPEG variants the narrow C helper deliberately rejects.
+#
+# The helper is installed beside this script, so derive it from $0 rather than
+# hardcoding a prefix. BRSCAN_JPEG2PDF overrides that, both for testing and for
+# the case where $0 is not a usable path because the script was fed to a shell
+# on stdin.
+jpeg2pdf="${BRSCAN_JPEG2PDF:-$(dirname "$0")/brscan-jpeg2pdf}"
+
+if [ -x "$jpeg2pdf" ] && "$jpeg2pdf" --dpi "$RESOLUTION" "$work/page.jpg" \
+        -o "$out" 2>>"$work/pdf.err"; then
+    :
+elif command -v img2pdf >/dev/null 2>&1; then
+    if [ -x "$jpeg2pdf" ]; then
+        echo "handler: brscan-jpeg2pdf declined the file, using img2pdf" >&2
+        sed 's/^/handler: jpeg2pdf: /' "$work/pdf.err" >&2
+    fi
     if ! img2pdf "$work/page.jpg" -o "$out" 2>>"$work/pdf.err"; then
         echo "handler: img2pdf failed, keeping JPEG" >&2
         cp "$work/page.jpg" "$OUTDIR/scan-$stamp.jpg"
         exit 1
     fi
 else
-    echo "handler: img2pdf not installed, writing JPEG instead" >&2
+    echo "handler: no PDF writer available, writing JPEG instead" >&2
     cp "$work/page.jpg" "$OUTDIR/scan-$stamp.jpg"
     exit 0
 fi
