@@ -1,0 +1,23 @@
+# udev rules for Brother scanners driven by the libsane-brother backend.
+#
+# Matches the Brother vendor ID rather than individual product IDs, so any
+# model listed in Brsane.ini is covered without editing this file. The backend
+# talks to the vendor-specific interface via libusb and therefore needs write
+# access to the raw USB node; without this rule scanning only works as root.
+#
+# Install to /etc/udev/rules.d/60-brother-scanner.rules, then:
+#   sudo udevadm control --reload-rules && sudo udevadm trigger
+#
+# This rule is deliberately ADDITIVE: it sets only libsane_matched=yes and
+# does not assign GROUP or MODE. Brother MFPs are printer-class devices, so
+# 50-udev-default.rules already gives the node to group lp, and CUPS's usb
+# backend (mode 0744, so it runs as user lp, not root) needs that access to
+# print. Reassigning the group to "scanner" silently breaks printing, because
+# user lp is not a member of the scanner group.
+#
+# Instead, libsane_matched=yes triggers 99-libsane1.rules, which runs
+#   setfacl -m g:scanner:rw $env{DEVNAME}
+# adding scanner-group access on top of the existing lp ownership. Both the
+# print path and the scan path then work.
+
+ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="04f9", ENV{libsane_matched}="yes"
