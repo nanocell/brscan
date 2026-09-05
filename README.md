@@ -166,6 +166,12 @@ libsane-brother.so.1    SANE backend (talks USB, parses scan protocol)
   └── libjpeg            24-bit color decode (JPEG-over-USB for brscan4)
 ```
 
+## Known Gaps
+
+Unmapped panel function codes, missing replay fixtures for the key-decode path,
+and the open question of whether the DCP-7060D platen is A4 or Letter width are
+tracked in [TODO.md](TODO.md).
+
 ## License
 
 GPL v2 (original Brother license preserved).
