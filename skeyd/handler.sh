@@ -29,6 +29,23 @@ stamp=$(date +%Y%m%d-%H%M%S)
 work=$(mktemp -d "${TMPDIR_BASE}/brscan-XXXXXX") || exit 1
 trap 'rm -rf "$work"' EXIT
 
+# Look at only the Brother backend.
+#
+# `scanimage -L` otherwise loads every backend listed in /etc/sane.d/dll.conf -
+# about 80 on a stock install - and several of them (net, escl, airscan) probe
+# the network and block on timeouts. Measured on a 700MHz ARMv6: 10.4s wall for
+# 1.8s of CPU, which was longer than assembling the PDF and a third of the whole
+# press-to-PDF time. With a one-line backend list it is 0.1s.
+#
+# Safe because the Brother backend keeps its own config (Brsane.ini,
+# brsanenetdevice.cfg) under /usr/share/sane/brother, not in the SANE config
+# dir, so nothing is lost by not falling back to /etc/sane.d. Naming
+# /etc/sane.d as a fallback would undo most of the saving anyway: the dll
+# backend then also reads its dll.d/ drop-ins, which costs 1.5s of the 10.4s.
+sane_conf="$work/sane"
+mkdir -p "$sane_conf" && echo brother > "$sane_conf/dll.conf" || exit 1
+export SANE_CONFIG_DIR="$sane_conf"
+
 # Resolve the device. The backend names devices by enumeration order
 # (bus%d;dev%d), which is not stable across replugs, so look it up each time
 # rather than baking it into the unit file.
